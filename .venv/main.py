@@ -1,4 +1,4 @@
-''' 3-Body-Problem by scnbt90'''
+''' 3-Body-Problem mit Erweiterungen und schwarzem Loch by scnbt90 '''
 import pygame
 import pygame_gui
 import math
@@ -51,12 +51,17 @@ camera = Camera()
 
 # Simulationselemente
 bodies = []
+black_holes = []
+black_hole_mass = 5000.0
 paused = False
 running = True
 simulation_running = False
 speed = 1.0
 max_bodies = 10
 max_path_length = 300
+invert_gravity = False
+use_merge_logic = False
+use_soft_repulsion = False
 
 # GUI Elemente
 start_button = pygame_gui.elements.UIButton(pygame.Rect((20, 20), (120, 40)), "Start", manager)
@@ -69,8 +74,76 @@ speed_label = pygame_gui.elements.UILabel(pygame.Rect((850, 20), (130, 40)), "Sp
 path_slider = pygame_gui.elements.UIHorizontalSlider(pygame.Rect((1000, 20), (180, 40)), start_value=300, value_range=(0, 1000), manager=manager)
 path_label = pygame_gui.elements.UILabel(pygame.Rect((1190, 20), (100, 40)), f"Pfad: {max_path_length}", manager=manager)
 energy_label = pygame_gui.elements.UILabel(pygame.Rect(WIDTH - 300, 70, 280, 90), "", manager=manager)
+gravity_button = pygame_gui.elements.UIButton(pygame.Rect((20, 70), (150, 30)), "Gravitation ±", manager)
+merge_toggle = pygame_gui.elements.UIButton(pygame.Rect((180, 70), (150, 30)), "Merge: OFF", manager)
+repel_toggle = pygame_gui.elements.UIButton(pygame.Rect((340, 70), (150, 30)), "Repel: OFF", manager)
+blackhole_slider = pygame_gui.elements.UIHorizontalSlider(pygame.Rect((500, 70), (200, 30)), start_value=5000, value_range=(1000, 1000000), manager=manager)
+blackhole_label = pygame_gui.elements.UILabel(pygame.Rect((710, 70), (140, 30)), f"BH-Masse: {black_hole_mass:.0f}", manager=manager)
 
 inputs = []
+
+class Body:
+    def __init__(self, mass, pos, vel, color):
+        self.mass = mass
+        self.position = pygame.Vector2(pos)
+        self.velocity = pygame.Vector2(vel)
+        self.color = color
+        self.base_radius = max(3, int(mass ** (1/3) * 0.2))
+        self.path = []
+
+    def update(self, dt):
+        self.position += self.velocity * dt
+        self.path.append(self.position.copy())
+        if len(self.path) > max_path_length:
+            self.path.pop(0)
+
+    def draw(self, screen, camera):
+        pos = camera.apply(self.position)
+        radius = max(1, int(self.base_radius * camera.zoom))
+        pygame.draw.circle(screen, self.color, (int(pos.x), int(pos.y)), radius)
+        if len(self.path) > 2:
+            points = [camera.apply(p) for p in self.path]
+            pygame.draw.lines(screen, self.color, False, [(int(p.x), int(p.y)) for p in points], 1)
+
+class BlackHole:
+    def __init__(self, pos, mass):
+        self.position = pygame.Vector2(pos)
+        self.mass = mass
+
+    def draw(self, screen, camera):
+        pos = camera.apply(self.position)
+        radius = max(5, int(math.sqrt(self.mass) * 0.1 * camera.zoom))
+        pygame.draw.circle(screen, (0, 0, 0), (int(pos.x), int(pos.y)), radius)
+        pygame.draw.circle(screen, (200, 200, 255), (int(pos.x), int(pos.y)), radius, 2)
+
+def apply_blackhole_gravity():
+    for bh in black_holes:
+        for body in bodies:
+            distance = bh.position - body.position
+            r2 = max(distance.length_squared(), 100)
+            force_mag = G * bh.mass * body.mass / r2
+            force = distance.normalize() * force_mag
+            acc = force / body.mass
+            body.velocity += acc * dt * speed
+
+def handle_blackhole_placement(events):
+    global black_hole_mass
+    for event in events:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_pos = pygame.mouse.get_pos()
+            if mouse_pos[1] <= GUI_HEIGHT:
+                continue  # Klick in der GUI ignorieren
+
+            sim_pos = camera.inverse_apply(mouse_pos)
+
+            # Prüfe, ob auf ein vorhandenes schwarzes Loch geklickt wurde
+            for bh in black_holes:
+                if (sim_pos - bh.position).length() < math.sqrt(bh.mass) * 0.1:
+                    black_holes.remove(bh)
+                    return  # nur ein Loch pro Klick löschen
+
+            # Falls kein Treffer: neues schwarzes Loch platzieren
+            black_holes.append(BlackHole(sim_pos, black_hole_mass))
 
 def add_body_input():
     if len(inputs) >= max_bodies:
@@ -103,34 +176,11 @@ def remove_body_input():
         if hasattr(element, 'kill'):
             element.kill()
 
-class Body:
-    def __init__(self, mass, pos, vel, color):
-        self.mass = mass
-        self.position = pygame.Vector2(pos)
-        self.velocity = pygame.Vector2(vel)
-        self.color = color
-        self.base_radius = max(3, int(mass ** (1/3) * 0.2))
-        self.path = []
-
-    def update(self, dt):
-        self.position += self.velocity * dt
-        self.path.append(self.position.copy())
-        if len(self.path) > max_path_length:
-            self.path.pop(0)
-
-    def draw(self, screen, camera):
-        pos = camera.apply(self.position)
-        radius = max(1, int(self.base_radius * camera.zoom))
-        pygame.draw.circle(screen, self.color, (int(pos.x), int(pos.y)), radius)
-        if len(self.path) > 2:
-            points = [camera.apply(p) for p in self.path]
-            pygame.draw.lines(screen, self.color, False, [(int(p.x), int(p.y)) for p in points], 1)
-
 def compute_gravity(b1, b2):
     distance = b2.position - b1.position
     r2 = max(distance.length_squared(), 100)
     force_mag = G * b1.mass * b2.mass / r2
-    return distance.normalize() * force_mag
+    return distance.normalize() * force_mag * (-1 if invert_gravity else 1)
 
 def calculate_energy_and_momentum():
     T, U = 0, 0
@@ -143,6 +193,48 @@ def calculate_energy_and_momentum():
                 r = (b1.position - b2.position).length()
                 U -= G * b1.mass * b2.mass / r
     return T, U, T + U, P
+
+def apply_soft_repulsion():
+    for i in range(len(bodies)):
+        for j in range(i + 1, len(bodies)):
+            b1, b2 = bodies[i], bodies[j]
+            delta = b2.position - b1.position
+            dist = delta.length()
+            min_dist = b1.base_radius + b2.base_radius
+            if dist < min_dist:
+                repulsion_strength = 500
+                force = delta.normalize() * repulsion_strength * (min_dist - dist)
+                b1.velocity -= force / b1.mass
+                b2.velocity += force / b2.mass
+
+def handle_merging_collisions():
+    global bodies
+    merged = set()
+    new_bodies = []
+    for i in range(len(bodies)):
+        if i in merged:
+            continue
+        b1 = bodies[i]
+        for j in range(i + 1, len(bodies)):
+            if j in merged:
+                continue
+            b2 = bodies[j]
+            dist = (b1.position - b2.position).length()
+            min_dist = b1.base_radius + b2.base_radius
+            if dist < min_dist:
+                total_mass = b1.mass + b2.mass
+                new_velocity = (b1.velocity * b1.mass + b2.velocity * b2.mass) / total_mass
+                new_position = (b1.position * b1.mass + b2.position * b2.mass) / total_mass
+                new_color = [(c1 + c2) // 2 for c1, c2 in zip(b1.color, b2.color)]
+                new_body = Body(total_mass, new_position, new_velocity, new_color)
+                new_bodies.append(new_body)
+                merged.add(i)
+                merged.add(j)
+                break
+        if i not in merged:
+            new_bodies.append(b1)
+    bodies = new_bodies
+
 
 def build_bodies():
     global bodies
@@ -157,39 +249,55 @@ def build_bodies():
         except:
             continue
 
+# Starte mit 3 Körpern
 for _ in range(3):
     add_body_input()
 
+# Hauptloop
 while running:
     dt = clock.tick(60) / 1000.0
     events = pygame.event.get()
+
+    handle_blackhole_placement(events)
+
     for event in events:
         if event.type == pygame.QUIT:
             running = False
-        if event.type == pygame.USEREVENT:
-            if event.user_type == pygame_gui.UI_BUTTON_PRESSED:
-                if event.ui_element == start_button:
-                    build_bodies()
-                    simulation_running = True
-                    paused = False
-                elif event.ui_element == pause_button:
-                    paused = not paused
-                elif event.ui_element == reset_button:
-                    simulation_running = False
-                    bodies = []
-                    camera.offset = pygame.Vector2(0, 0)
-                    camera.zoom = 1.0
-                elif event.ui_element == add_button:
-                    add_body_input()
-                elif event.ui_element == remove_button:
-                    remove_body_input()
-        manager.process_events(event)
+        if event.type == pygame_gui.UI_BUTTON_PRESSED:
+            if event.ui_element == start_button:
+                build_bodies()
+                simulation_running = True
+                paused = False
+            elif event.ui_element == pause_button:
+                paused = not paused
+            elif event.ui_element == reset_button:
+                simulation_running = False
+                bodies = []
+                black_holes = []
+                camera.offset = pygame.Vector2(0, 0)
+                camera.zoom = 1.0
+            elif event.ui_element == add_button:
+                add_body_input()
+            elif event.ui_element == remove_button:
+                remove_body_input()
+            elif event.ui_element == gravity_button:
+                invert_gravity = not invert_gravity
+            elif event.ui_element == merge_toggle:
+                use_merge_logic = not use_merge_logic
+                merge_toggle.set_text(f"Merge: {'ON' if use_merge_logic else 'OFF'}")
+            elif event.ui_element == repel_toggle:
+                use_soft_repulsion = not use_soft_repulsion
+                repel_toggle.set_text(f"Repel: {'ON' if use_soft_repulsion else 'OFF'}")
 
+    manager.process_events(event)
     camera.handle_input(events)
+
     speed = speed_slider.get_current_value()
     speed_label.set_text(f"Speed: {speed:.1f}x")
     max_path_length = int(path_slider.get_current_value())
     path_label.set_text(f"Pfad: {max_path_length}")
+    black_hole_mass = blackhole_slider.get_current_value()
+    blackhole_label.set_text(f"BH-Masse: {black_hole_mass:.0f}")
 
     if simulation_running and not paused:
         scaled_dt = dt * speed
@@ -202,15 +310,25 @@ while running:
             acc = forces[i] / body.mass
             body.velocity += acc * scaled_dt
             body.update(scaled_dt)
+
+        if use_soft_repulsion:
+            apply_soft_repulsion()
+        if use_merge_logic:
+            handle_merging_collisions()
+
+        apply_blackhole_gravity()
         T, U, E, P = calculate_energy_and_momentum()
         energy_label.set_text(f"T: {T:.1f} | U: {U:.1f}\nE: {E:.1f}\nImpuls: {P.x:.1f}, {P.y:.1f}")
 
     screen.fill((15, 15, 15))
     for body in bodies:
         body.draw(screen, camera)
+    for bh in black_holes:
+        bh.draw(screen, camera)
     pygame.draw.rect(screen, (30, 30, 30), (0, 0, WIDTH, GUI_HEIGHT))
     manager.update(dt)
     manager.draw_ui(screen)
+    pygame.display.set_caption(f"3-Body Problem | Zoom: {camera.zoom:.2f}")
     pygame.display.flip()
 
 pygame.quit()
