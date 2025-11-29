@@ -547,7 +547,7 @@ def add_body_input():
 
     # Label-Zeile
     label = pygame_gui.elements.UILabel(
-        pygame.Rect(20, base_y, LEFT_PANEL_WIDTH - 40, 18),
+        pygame.Rect(20, base_y, 120, 26),  # mehr Höhe & ausreichende Breite
         f"Körper {i + 1}:",
         manager,
     )
