@@ -1,6 +1,63 @@
-# created by virtualenv automatically
-Include/
-Lib/
-Scripts/
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environment
 .venv/
-pyvenv.cfg
+venv/
+ENV/
+env/
+
+# Byte-compiled / cached
+*.log
+*.tmp
+*.cache
+.cache/
+.pytest_cache/
+
+# Jupyter (falls du später Notebooks nutzt)
+.ipynb_checkpoints/
+
+# --- Pygame & Simulation ---
+# Nutzer-generierte Dateien
+*.sav
+*.data
+*.state
+
+# Screenshot-Rohdateien (OPTIONAL — falls du nur den finalen Ordner nutzt)
+# screenshots_raw/
+# recordings/
+
+# --- IDE / Editor ---
+# VS Code
+.vscode/
+.history/
+
+# PyCharm / JetBrains
+.idea/
+*.iml
+
+# --- OS files ---
+# macOS
+.DS_Store
+.AppleDouble
+._*
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# --- Git ---
+# GitHub actions cache
+.github/cache/
+
+# --- User config (falls du später Settings speicherst) ---
+config.json
+settings.json
