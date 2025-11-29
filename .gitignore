@@ -22,7 +22,7 @@ env/
 .cache/
 .pytest_cache/
 
-# Jupyter (falls du später Notebooks nutzt)
+# Jupyter
 .ipynb_checkpoints/
 
 # --- Pygame & Simulation ---
@@ -31,7 +31,7 @@ env/
 *.data
 *.state
 
-# Screenshot-Rohdateien (OPTIONAL — falls du nur den finalen Ordner nutzt)
+# Screenshot-Rohdateien (OPTIONAL)
 # screenshots_raw/
 # recordings/
 
@@ -58,6 +58,6 @@ desktop.ini
 # GitHub actions cache
 .github/cache/
 
-# --- User config (falls du später Settings speicherst) ---
+# --- User config ---
 config.json
 settings.json
